@@ -89,20 +89,23 @@ def synchronize_time(timezone_offset):
         time.sleep(5)
         microcontroller.reset()
 
-# Function to calculate days remaining until the target date
-def calculate_days_remaining(target_month, target_day):
-    now = datetime.now()
-    today = datetime(now.year, now.month, now.day)
-
-    # Determine the target year
-    if (now.month > target_month) or (now.month == target_month and now.day > target_day):
-        target_year = now.year + 1
-    else:
-        target_year = now.year
-
-    target_date = datetime(target_year, target_month, target_day)
-    delta = target_date - today
-    return delta.days
+# **Reintroduced Function to Connect to Wi-Fi with Retry Logic**
+def connect_to_wifi(ssid, password):
+    wifi.radio.stop_ap()
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            print(f"Attempting to connect to Wi-Fi (Attempt {attempt + 1}/{max_retries})...")
+            display_message([f"Connecting to Wi-Fi", f"Attempt {attempt + 1}/{max_retries}"])
+            wifi.radio.connect(ssid, password)
+            print("Connected to Wi-Fi!")
+            display_message(["Wi-Fi Connected!", "Syncing Time..."])
+            return True
+        except Exception as e:
+            print(f"Failed to connect to Wi-Fi: {e}")
+            time.sleep(2)  # Wait before retrying
+    print("All Wi-Fi connection attempts failed.")
+    return False
 
 # Main function
 def main():
@@ -112,17 +115,16 @@ def main():
     if config is None:
         print("No configuration found. Please set up the device.")
         display_message(["No Config Found!", "Rebooting..."])
-        time.sleep(3)
+        time.sleep(5)
         microcontroller.reset()
 
-    # Connect to Wi-Fi
-    try:
-        wifi.radio.connect(config["ssid"], config["password"])
-        print("Connected to Wi-Fi!")
-        display_message(["Wi-Fi Connected!", "Syncing Time..."])
-        time.sleep(1)
-    except Exception as e:
-        print("Failed to connect to Wi-Fi:", e)
+    # **Ensure Access Point is Stopped Before Connecting**
+    wifi.radio.stop_ap()
+    time.sleep(1)  # Small delay to ensure AP is stopped
+
+    # Connect to Wi-Fi with retries
+    connected = connect_to_wifi(config["ssid"], config["password"])
+    if not connected:
         display_message(["Wi-Fi Error!", "Rebooting..."])
         time.sleep(5)
         microcontroller.reset()
@@ -152,6 +154,21 @@ def main():
         next_midnight = datetime(now.year, now.month, now.day) + timedelta(days=1)
         sleep_seconds = (next_midnight - now).total_seconds()
         time.sleep(sleep_seconds)
+
+# Function to calculate days remaining until the target date
+def calculate_days_remaining(target_month, target_day):
+    now = datetime.now()
+    today = datetime(now.year, now.month, now.day)
+
+    # Determine the target year
+    if (now.month > target_month) or (now.month == target_month and now.day > target_day):
+        target_year = now.year + 1
+    else:
+        target_year = now.year
+
+    target_date = datetime(target_year, target_month, target_day)
+    delta = target_date - today
+    return delta.days
 
 if __name__ == "__main__":
     main()
