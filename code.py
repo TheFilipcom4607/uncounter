@@ -1,23 +1,17 @@
 import time
 import board
 import busio
-import digitalio
-import storage
 import displayio
 import terminalio
 from adafruit_display_text import label
 import wifi
-import socketpool
-import adafruit_ntp
-import rtc
 import json
 from adafruit_datetime import datetime, timedelta
+import rtc
+import socketpool
+import adafruit_ntp
 import adafruit_displayio_ssd1306
 import microcontroller
-import ssl
-from adafruit_httpserver import Server, Request, Response, MIMETypes
-import os
-import random
 
 # Setup OLED display
 displayio.release_displays()
@@ -35,165 +29,27 @@ def display_message(lines):
         text_area = label.Label(terminalio.FONT, text=line, color=0xFFFFFF, x=0, y=y)
         splash.append(text_area)
         y += 11
-    display.root_group = splash  # Correct way to set the root group on OLED
+    display.root_group = splash
 
-# Function to start access point mode with stabilization delay
-def start_access_point():
-    ap_ssid = "Countdown-Setup"
-    ap_password = f"{random.randint(0, 99999999):08}"  # 8-digit random password
-    wifi.radio.stop_station()
-    wifi.radio.start_ap(ssid=ap_ssid, password=ap_password)
+# Function to display the countdown on the OLED screen
+def display_countdown(days_remaining, target_label):
+    splash = displayio.Group()
 
-    max_wait = 10
-    while not wifi.radio.ipv4_address_ap and max_wait > 0:
-        time.sleep(1)
-        max_wait -= 1
+    # Title text
+    title_text = f"Days until {target_label}"
+    title_area = label.Label(terminalio.FONT, text=title_text, color=0xFFFFFF, scale=1)
+    title_area.x = (WIDTH - title_area.bounding_box[2]) // 2
+    title_area.y = 5
+    splash.append(title_area)
 
-    time.sleep(2)  # Stabilization time for AP mode
-    ip = wifi.radio.ipv4_address_ap
+    # Countdown number (large font)
+    days_text = str(days_remaining)
+    days_area = label.Label(terminalio.FONT, text=days_text, color=0xFFFFFF, scale=6)
+    days_area.x = 30
+    days_area.y = 38
+    splash.append(days_area)
 
-    if ip:
-        display_message([
-            "Connect to Wi-Fi:",
-            ap_ssid,
-            "Password:",
-            ap_password,
-            "Visit:",
-            f"{str(ip)}:8080"
-        ])
-
-    print("Access Point started")
-    print("SSID:", ap_ssid)
-    print("Password:", ap_password)
-    print("IP address:", ip)
-    return ip
-
-# Function to run the configuration web server
-def run_configuration_server(ip):
-    from adafruit_httpserver import Server, Request, Response, MIMETypes
-
-    pool = socketpool.SocketPool(wifi.radio)
-    server = Server(pool, "/static")
-
-    @server.route("/", methods=["GET"])
-    def index(request: Request):
-        html = """
-        <html>
-        <head><title>Countdown Configuration</title></head>
-        <body>
-        <h1>Configure Your Countdown</h1>
-        <form action="/configure" method="post">
-            Wi-Fi SSID:<br>
-            <input type="text" name="ssid"><br>
-            Wi-Fi Password:<br>
-            <input type="password" name="password"><br>
-            Timezone (UTC offset):<br>
-            <input type="number" name="timezone" min="-12" max="14" value="0"><br>
-            Target Date (MM-DD):<br>
-            <input type="text" name="target_date" value="12-24"><br>
-            Countdown Label:<br>
-            <input type="text" name="target_label" value="Event"><br><br>
-            <input type="submit" value="Save">
-        </form>
-        </body>
-        </html>
-        """
-        return Response(request, content_type="text/html", body=html)
-
-    @server.route("/configure", methods=["POST"])
-    def configure(request: Request):
-        raw_data = request.body.decode('utf-8')
-        form_data = parse_form_data(raw_data)
-        ssid = form_data.get("ssid", "")
-        password = form_data.get("password", "")
-        timezone = int(form_data.get("timezone", "0"))
-        target_date = form_data.get("target_date", "12-24")
-        target_label = form_data.get("target_label", "Event")
-
-        # Save the configuration
-        config = {
-            "ssid": ssid,
-            "password": password,
-            "timezone": timezone,
-            "target_date": target_date,
-            "target_label": target_label
-        }
-        with open("/config.json", "w") as f:
-            json.dump(config, f)
-
-        # Display confirmation on OLED
-        display_message(["Configuration saved!", "Resetting..."])
-
-        html = """
-        <html>
-        <head><title>Configuration Saved</title></head>
-        <body>
-        <h1>Configuration Saved!</h1>
-        <p>The device will restart shortly.</p>
-        </body>
-        </html>
-        """
-        # Send HTTP response
-        response = Response(request, content_type="text/html", body=html)
-        response.send()
-
-        # Stop the server and access point after a short delay
-        time.sleep(2)  # Allow response to reach client
-        print("Stopping server and access point...")
-        server.stop()
-        wifi.radio.stop_ap()
-
-        # Reset the microcontroller
-        time.sleep(3)  # Delay for user to see OLED message
-        microcontroller.reset()
-
-    print("Starting configuration server...")
-
-    try:
-        server.start(str(ip), port=8080)
-        print(f"Configuration server running at http://{ip}:8080")
-    except Exception as e:
-        print("Server failed to start:", e)
-        return
-
-    while True:
-        try:
-            server.poll()
-        except Exception as e:
-            print("Server error:", e)
-            time.sleep(1)
-            continue
-
-# Helper functions for URL decoding and form data parsing
-def unquote_plus(s):
-    s = s.replace('+', ' ')
-    res = ''
-    i = 0
-    while i < len(s):
-        c = s[i]
-        if c == '%' and i + 2 < len(s):
-            hex_value = s[i+1:i+3]
-            try:
-                res += chr(int(hex_value, 16))
-                i += 3
-                continue
-            except ValueError:
-                pass
-        else:
-            res += c
-            i += 1
-    return res
-
-def parse_form_data(form_str):
-    form_data = {}
-    pairs = form_str.split('&')
-    for pair in pairs:
-        if '=' in pair:
-            key, value = pair.split('=', 1)
-            key = unquote_plus(key)
-            value = unquote_plus(value)
-            form_data[key] = value
-    return form_data
+    display.root_group = splash
 
 # Function to load configuration
 def load_configuration():
@@ -210,19 +66,82 @@ def load_configuration():
         print("Configuration not found. Starting with default configuration.")
         return None
 
+# Function to synchronize time
+def synchronize_time(timezone_offset):
+    try:
+        pool = socketpool.SocketPool(wifi.radio)
+        ntp = adafruit_ntp.NTP(pool, tz_offset=timezone_offset)
+        rtc.RTC().datetime = ntp.datetime
+        print("Time synchronized!")
+    except Exception as e:
+        print("Failed to synchronize time:", e)
+        display_message(["Time Sync Error!", "Rebooting..."])
+        time.sleep(5)
+        microcontroller.reset()
+
+# Function to calculate days remaining until the target date
+def calculate_days_remaining(target_month, target_day):
+    now = datetime.now()
+    today = datetime(now.year, now.month, now.day)
+
+    # Determine the target year
+    if (now.month > target_month) or (now.month == target_month and now.day > target_day):
+        target_year = now.year + 1
+    else:
+        target_year = now.year
+
+    target_date = datetime(target_year, target_month, target_day)
+    delta = target_date - today
+    return delta.days
+
 # Main function
 def main():
     print("Starting main function...")
 
     config = load_configuration()
     if config is None:
-        print("No configuration found. Starting Access Point mode.")
-        ip = start_access_point()
-        run_configuration_server(ip)
-    else:
-        print("Configuration found. Connecting to Wi-Fi...")
-        # Existing functionality to use the loaded configuration
-        pass
+        print("No configuration found. Please set up the device.")
+        display_message(["No Config Found!", "Rebooting..."])
+        time.sleep(5)
+        microcontroller.reset()
+
+    # Connect to Wi-Fi
+    try:
+        wifi.radio.connect(config["ssid"], config["password"])
+        print("Connected to Wi-Fi!")
+        display_message(["Wi-Fi Connected!", "Syncing Time..."])
+        time.sleep(2)
+    except Exception as e:
+        print("Failed to connect to Wi-Fi:", e)
+        display_message(["Wi-Fi Error!", "Rebooting..."])
+        time.sleep(5)
+        microcontroller.reset()
+
+    # Synchronize time
+    synchronize_time(config.get("timezone", 0))
+
+    # Initialize countdown display
+    target_date = config["target_date"]
+    target_label = config["target_label"]
+    target_month, target_day = map(int, target_date.split("-"))
+
+    print(f"Countdown target set to {target_date} for {target_label}.")
+    last_days_remaining = None
+
+    while True:
+        # Calculate days remaining
+        days_remaining = calculate_days_remaining(target_month, target_day)
+
+        if days_remaining != last_days_remaining:
+            display_countdown(days_remaining, target_label)
+            print(f"Days remaining until {target_label}: {days_remaining}")
+            last_days_remaining = days_remaining
+
+        # Sleep until the next day
+        now = datetime.now()
+        next_midnight = datetime(now.year, now.month, now.day) + timedelta(days=1)
+        sleep_seconds = (next_midnight - now).total_seconds()
+        time.sleep(sleep_seconds)
 
 if __name__ == "__main__":
     main()
