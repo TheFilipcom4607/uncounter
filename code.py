@@ -45,8 +45,18 @@ def display_countdown(days_remaining, target_label):
     # Countdown number (large font)
     days_text = str(days_remaining)
     days_area = label.Label(terminalio.FONT, text=days_text, color=0xFFFFFF, scale=6)
-    days_area.x = 30
-    days_area.y = 38
+
+    # Adjust position based on the number of digits
+    if len(days_text) == 1:  # Single digit
+        days_area.x = 50
+        days_area.y = 38
+    elif len(days_text) == 2:  # Two digits
+        days_area.x = 30
+        days_area.y = 38
+    elif len(days_text) == 3:  # Three digits
+        days_area.x = 10
+        days_area.y = 38
+
     splash.append(days_area)
 
     display.root_group = splash
@@ -102,7 +112,7 @@ def main():
     if config is None:
         print("No configuration found. Please set up the device.")
         display_message(["No Config Found!", "Rebooting..."])
-        time.sleep(5)
+        time.sleep(3)
         microcontroller.reset()
 
     # Connect to Wi-Fi
@@ -110,7 +120,7 @@ def main():
         wifi.radio.connect(config["ssid"], config["password"])
         print("Connected to Wi-Fi!")
         display_message(["Wi-Fi Connected!", "Syncing Time..."])
-        time.sleep(2)
+        time.sleep(1)
     except Exception as e:
         print("Failed to connect to Wi-Fi:", e)
         display_message(["Wi-Fi Error!", "Rebooting..."])
