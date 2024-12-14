@@ -44,9 +44,6 @@ UnCounter is a compact, battery-powered device that helps you keep track of time
    ```
 
 2. Navigate to the project directory:
-   ```bash
-   cd uncounter
-   ```
 
 3. Before flashing:
    - Ensure your ESP32-S3 Super Mini is flashed with circuitpython and its connected
