@@ -46,7 +46,7 @@ UnCounter is a compact, battery-powered device that helps you keep track of time
 2. Navigate to the project directory:
 
 3. Before flashing:
-   - Ensure your ESP32-S3 Super Mini is flashed with circuitpython and its connected
+   - Ensure your ESP32-S3 is flashed with circuitpython and its connected
    - Make sure you have adequate USB-C cable for data transfer
 
 4. Flash the device:
