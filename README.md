@@ -87,9 +87,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 If you encounter any issues or have questions:
-- Open an issue on GitHub
-- Check existing issues for solutions
-- Review the documentation in the Wiki (coming soon)
+Open an issue on GitHub
 
 ---
 
